@@ -18,3 +18,8 @@ export interface Channel {
   disconnect(): Promise<void>;
   getData(): Promise<Response>;
 }
+
+export enum DataPriority {
+  HIGH = 'high',
+  LOW = 'low',
+}

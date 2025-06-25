@@ -1,10 +1,13 @@
-import { Channel, ConnectionStatus, Response } from "./interfaces";
+import { Channel, ConnectionStatus, DataPriority, Response } from './interfaces';
+import { getAvailableChannels, sortChannelsByPriority } from './utils';
 
 export class ChannelManager {
   private channels: Channel[] = [];
   private activeChannel: Channel | null = null;
   private checkInterval = 10000;
   private buffer: Response | null = null;
+
+  // Флаг для предотвращения повторных подключений
   private isConnecting = false;
 
   constructor(channels: Channel[]) {
@@ -20,7 +23,7 @@ export class ChannelManager {
   private async connect(): Promise<boolean> {
     if (this.isConnecting) return false;
     this.isConnecting = true;
-    const sorted = this.channels.filter((c) => c.status === 'idle').sort((a, b) => a.priority - b.priority);
+    const sorted = sortChannelsByPriority(getAvailableChannels(this.channels));
 
     for (const channel of sorted) {
       try {
@@ -66,7 +69,7 @@ export class ChannelManager {
     }
   }
 
-  public async getData(): Promise<Response | null> {
+  public async getData(dataPriority: DataPriority = DataPriority.LOW): Promise<Response | null> {
     if (!this.activeChannel) return null;
     try {
       const data = await this.activeChannel.getData();
@@ -77,6 +80,9 @@ export class ChannelManager {
       return data;
     } catch {
       this.activeChannel.status = ConnectionStatus.UNAVAILABLE;
+      if (dataPriority === DataPriority.HIGH) {
+        await this.delay(2000);
+      }
       this.activeChannel = null;
       await this.connect();
       const success = await this.connect();
@@ -88,5 +94,9 @@ export class ChannelManager {
       const lastKnown = this.buffer;
       return lastKnown;
     }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
