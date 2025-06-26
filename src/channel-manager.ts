@@ -1,4 +1,4 @@
-import { Channel, ConnectionStatus, DataPriority, Response } from './interfaces';
+import { Channel, ConnectionStatus, Response } from './interfaces';
 import { getAvailableChannels, sortChannelsByPriority } from './utils';
 
 export class ChannelManager {
@@ -12,10 +12,9 @@ export class ChannelManager {
 
   constructor(channels: Channel[]) {
     this.channels = channels;
-    this.init();
   }
 
-  private async init() {
+  public async init() {
     await this.connect();
     setInterval(() => this.checkUnavailableChannels(), this.checkInterval);
   }
@@ -35,6 +34,7 @@ export class ChannelManager {
         this.isConnecting = false;
         return true;
       } catch {
+        console.warn(`Не удалось подключиться к каналу ${channel.id}`);
         channel.status = ConnectionStatus.UNAVAILABLE;
       }
     }
@@ -69,34 +69,35 @@ export class ChannelManager {
     }
   }
 
-  public async getData(dataPriority: DataPriority = DataPriority.LOW): Promise<Response | null> {
-    if (!this.activeChannel) return null;
-    try {
-      const data = await this.activeChannel.getData();
-
-      // Добавляем в буфер
-      this.buffer = data;
-
-      return data;
-    } catch {
-      this.activeChannel.status = ConnectionStatus.UNAVAILABLE;
-      if (dataPriority === DataPriority.HIGH) {
-        await this.delay(2000);
+  public async getData(): Promise<Response | null> {
+    // 1. Если есть активный канал — пытаемся получить данные
+    if (this.activeChannel) {
+      try {
+        const data = await this.activeChannel.getData();
+        this.buffer = data;
+        return data;
+      } catch (e) {
+        console.warn(`Ошибка при получении данных с канала ${this.activeChannel.id}`, e);
       }
-      this.activeChannel = null;
-      await this.connect();
-      const success = await this.connect();
-
-      if (success) {
-        return this.getData();
-      }
-      // возвращаем данные из буфера при неудаче
-      const lastKnown = this.buffer;
-      return lastKnown;
     }
-  }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    // 2. Пытаемся подключиться к доступному каналу
+    const connected = await this.connect();
+
+    // 3. Если подключились — получаем данные сразу же!
+    if (connected && this.activeChannel) {
+      try {
+        const data = await this.activeChannel.getData();
+        this.buffer = data;
+        return data;
+      } catch (e) {
+        console.warn(`Ошибка при получении данных после подключения`, e);
+      }
+    }
+
+    // 4. Если ничего не получилось — возвращаем последнее из буфера
+    const lastKnown = this.buffer ?? null;
+    console.warn('Используем данные из буфера:', lastKnown);
+    return lastKnown;
   }
 }
