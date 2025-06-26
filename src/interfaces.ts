@@ -15,7 +15,6 @@ export interface Channel {
   status: ConnectionStatus;
   checkAvailability(): Promise<boolean>;
   connect(): Promise<void>;
-  disconnect(): Promise<void>;
   getData(): Promise<Response>;
 }
 
